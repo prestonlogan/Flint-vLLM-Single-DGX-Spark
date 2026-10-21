@@ -25,7 +25,7 @@ Measured on one DGX Spark (GB10, 128 GB), single stream, using `smoke.py`:
 Requirements: a DGX Spark with Docker and the NVIDIA container runtime, and about 35 GB of free disk (22 GB of weights plus the 10.7 GB base image).
 
 ```bash
-git clone https://github.com/prestonlogan/flint-vllm-dgx-spark && cd flint-vllm-dgx-spark
+git clone https://github.com/prestonlogan/Flint-vLLM-Single-DGX-Spark && cd Flint-vLLM-Single-DGX-Spark
 
 # Weights (GGUF) plus config, tokenizer and chat template from the BF16 repo (no BF16 weights needed)
 hf download RecursiveSI/flint-nvfp4-gguf
