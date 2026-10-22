@@ -32,7 +32,8 @@ Requirements: a DGX Spark with Docker and the NVIDIA container runtime, and abou
 ```bash
 git clone https://github.com/prestonlogan/Flint-vLLM-Single-DGX-Spark && cd Flint-vLLM-Single-DGX-Spark
 
-# Weights (GGUF) plus config, tokenizer and chat template from the BF16 repo (no BF16 weights needed)
+# Weights (GGUF) plus config, tokenizer and chat template from the BF16 repo (no BF16 weights needed).
+# Needs the hf CLI: pip install -U huggingface_hub (tested with GGUF @ 6ec43e19, config @ 2a247be0)
 hf download RecursiveSI/flint-nvfp4-gguf
 hf download RecursiveSI/flint --include "*.json" "*.jinja"
 
@@ -90,7 +91,7 @@ A clean build from this repo was then run with `run.sh` defaults (262K context, 
 - KV cache 824,573 tokens (3.15 full-length requests);
 - `smoke.py` 134.3 tok/s with a correct tool call.
 
-The three middle rows were each checked independently over 3 alternating rounds. The `fast/` row comes from 2 rounds; its third round and the independent check were still running at the time of this commit.
+The three middle rows were each checked independently over 3 alternating rounds. The `fast/` row comes from 2 rounds plus the clean-build run above; it has not had a separate independent check.
 
 ### What it does
 Decode at batch 1 (one sequence, one token) takes these paths. Prefill and batched decode keep vLLM's stock paths.
