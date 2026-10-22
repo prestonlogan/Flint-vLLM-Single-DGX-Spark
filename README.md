@@ -16,11 +16,15 @@ Measured on one DGX Spark (GB10, 128 GB), single stream (c1), with `run.sh` defa
 | Decode, greedy | **134.6 tok/s** | 84.0 – 86.2 tok/s |
 | Decode, sampled (T 1.0, top-p 0.95, top-k 20) | **132.5 tok/s** | 83.2 – 85.2 tok/s |
 | `smoke.py` | 134.3 tok/s, tool call OK | 84.9 – 85.2 tok/s, tool call OK |
+| Prefill (6,057-token prompt) | 0.86 s, ~7,000 tok/s | 0.83 s, ~7,300 tok/s |
 | Time to first token | 0.11 s (short prompt) | 0.11 s |
+| Memory reserved (`GPU_UTIL=0.40`) | ~49 GiB of ~122 GiB | ~49 GiB |
 | Weights in memory | 22.4 GiB | 21.9 GiB |
-| KV cache | 824,573 tokens (3.15 full 262K-token requests) | 881,138 tokens (3.4 requests) |
+| KV cache | ~23.2 GiB, 824,573 tokens (3.15 full 262K-token requests) | 24.8 GiB, 881,138 tokens (3.4 requests) |
 | Load time | about 2 minutes to ready with warm caches | same |
 
+- Prefill was measured at one length only; longer prompts will be slower per token. The fast build keeps vLLM's stock prefill; its deterministic MoE align costs ~3.7% there.
+- `GPU_UTIL` sets the memory reserved; lowering it shrinks only the KV cache (weights stay ~22 GiB).
 - Decode is median tok/s over 8 prose prompts × 800 tokens (reasoning included), computed as (completion tokens − 1) / (last chunk − first chunk).
 - Quality of the fast build is within measured noise: decode-path perplexity −0.04% to −0.29% vs stock, and the LM head is exact. Details in [Fast build](#fast-build-135-toks-experimental).
 - Both builds return tool calls (`get_weather {"city": "Paris"}`, `finish_reason: tool_calls`, glm47 parser) and reasoning as `reasoning_content` (glm47 reasoning parser).
