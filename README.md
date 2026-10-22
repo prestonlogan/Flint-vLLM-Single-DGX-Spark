@@ -1,24 +1,29 @@
-# Flint on one DGX Spark with vLLM: ~85 tok/s stock, ~133 tok/s with the fast build
+# Flint on one DGX Spark with vLLM: ~135 tok/s
 
 This recipe serves [`RecursiveSI/flint`](https://huggingface.co/RecursiveSI/flint) on a single DGX Spark, using its 22.9 GB NVFP4 GGUF ([`RecursiveSI/flint-nvfp4-gguf`](https://huggingface.co/RecursiveSI/flint-nvfp4-gguf)) and vLLM. Flint is a 39.8B-total / 2.5B-active MoE with 262K context. It supports reasoning and tool calls, under Apache 2.0.
 
 Flint support is not in vLLM yet. The recipe is a thin image on top of a pinned vLLM nightly. It adds:
 - [vLLM PR #62938](https://github.com/vllm-project/vllm/pull/62938), which adds the Flint model and kernels. The PR is open and unmerged; this repo vendors it at head `db02bc9f`.
 - A small gate patch so the model runs on the Spark's GB10 (sm_121), where the PR's own SM100 kernels do not run.
+- An optional **fast build** (`fast/`) with our own batch-1 decode kernels for GB10, which takes single-stream decode from ~85 to ~135 tok/s.
 
 ## Results
 
-Measured on one DGX Spark (GB10, 128 GB), single stream, using `smoke.py`:
+Measured on one DGX Spark (GB10, 128 GB), single stream (c1), with `run.sh` defaults (262K context, `GPU_UTIL=0.40`):
 
-| | |
-|---|---|
-| Decode | **84.9 – 85.2 tok/s** (307-token reply, reasoning included) |
-| Time to first token | 0.11 s (short prompt) |
-| Weights in memory | 21.9 GiB |
-| KV cache at `GPU_UTIL=0.40` | 24.8 GiB = 881K tokens (3.4 full 262K-token requests) |
-| Load time | about 100 s to load weights; about 2 minutes to ready with warm caches |
-| Tool calls | `get_weather {"city": "Paris"}`, `finish_reason: tool_calls` (glm47 parser) |
-| Reasoning | returned separately as `reasoning_content` (glm47 reasoning parser) |
+| | Fast build (`fast/`) | Stock recipe |
+|---|---|---|
+| Decode, greedy | **134.6 tok/s** | 84.0 – 86.2 tok/s |
+| Decode, sampled (T 1.0, top-p 0.95, top-k 20) | **132.5 tok/s** | 83.2 – 85.2 tok/s |
+| `smoke.py` | 134.3 tok/s, tool call OK | 84.9 – 85.2 tok/s, tool call OK |
+| Time to first token | 0.11 s (short prompt) | 0.11 s |
+| Weights in memory | 22.4 GiB | 21.9 GiB |
+| KV cache | 824,573 tokens (3.15 full 262K-token requests) | 881,138 tokens (3.4 requests) |
+| Load time | about 2 minutes to ready with warm caches | same |
+
+- Decode is median tok/s over 8 prose prompts × 800 tokens (reasoning included), computed as (completion tokens − 1) / (last chunk − first chunk).
+- Quality of the fast build is within measured noise: decode-path perplexity −0.04% to −0.29% vs stock, and the LM head is exact. Details in [Fast build](#fast-build-135-toks-experimental).
+- Both builds return tool calls (`get_weather {"city": "Paris"}`, `finish_reason: tool_calls`, glm47 parser) and reasoning as `reasoning_content` (glm47 reasoning parser).
 
 ## Quick start
 
@@ -32,7 +37,10 @@ hf download RecursiveSI/flint-nvfp4-gguf
 hf download RecursiveSI/flint --include "*.json" "*.jinja"
 
 docker build -t flint-vllm-spark:pr62938 .
-./run.sh 8000                      # detached container "flint-vllm", OpenAI API on :8000, model name "flint"
+docker build -t flint-vllm-spark:fast fast/      # optional fast build (layered on the image above)
+
+# Detached container "flint-vllm", OpenAI API on :8000, model name "flint". Plain ./run.sh 8000 runs the stock recipe.
+IMAGE=flint-vllm-spark:fast ./run.sh 8000
 docker logs -f flint-vllm          # wait for "Application startup complete"
 python3 smoke.py 8000              # decode rate + a tool call
 ```
@@ -53,9 +61,9 @@ python3 smoke.py 8000              # decode rate + a tool call
 
 The server applies the model's sampling defaults (temperature 1.0, top-p 0.95, top-k 20) when a request omits them. The model card recommends an output budget of at least 32K tokens for hard problems, and keeping returned `reasoning_content` in the conversation history.
 
-## Fast build: ~133 tok/s (experimental)
+## Fast build: ~135 tok/s (experimental)
 
-`fast/` layers our own batch-1 decode kernels on top of the base image. Single-stream decode goes from about 84 to about 133 tok/s, and quality stays within measured noise.
+`fast/` layers our own batch-1 decode kernels on top of the base image. Single-stream decode goes from about 85 to about 135 tok/s, and quality stays within measured noise.
 
 ```bash
 docker build -t flint-vllm-spark:pr62938 .                       # base image first
